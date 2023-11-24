@@ -141,19 +141,24 @@ NOTES:
  *   Legal ops: ~ &
  *   Max ops: 14
  *   Rating: 1
+ *   resolve: 
+ *      不同时为0 和 不同时为1 进行 与
+ *  ~(~x & ~y) & ~(x & y)
  */
 int bitXor(int x, int y) {
-  return 2;
+  return ~(~x & ~y) & ~(x & y);
 }
 /* 
  * tmin - return minimum two's complement integer 
  *   Legal ops: ! ~ & ^ | + << >>
  *   Max ops: 4
  *   Rating: 1
+ *   resolve:
+ *      对于32位补码表示的整数, tmin = 0x80000000
  */
 int tmin(void) {
 
-  return 2;
+  return 1 << 31;
 
 }
 //2
@@ -163,9 +168,11 @@ int tmin(void) {
  *   Legal ops: ! ~ & ^ | +
  *   Max ops: 10
  *   Rating: 1
+ *   Resolve:
+ *      Tmax ^ (Tmax + 1) = 0xffffffff, 但是要排除 0x80000000(-1) 的情况
  */
 int isTmax(int x) {
-  return 2;
+  return !(~(x ^ (x + 1)) | !(x + 1));
 }
 /* 
  * allOddBits - return 1 if all odd-numbered bits in word set to 1
@@ -174,9 +181,16 @@ int isTmax(int x) {
  *   Legal ops: ! ~ & ^ | + << >>
  *   Max ops: 12
  *   Rating: 2
+ *   Resolve:
+ *      构造 0xAAAAAAAA, 然后 x 和其做按位与, 如果还是0xAAAAAAAA则 return 
+ *   Warning:
+ *      Integer constants 0 through 255 (0xFF), inclusive. You are
+ *      not allowed to use big constants such as 0xffffffff
  */
 int allOddBits(int x) {
-  return 2;
+  int y = 0xAA + (0xAA << 8);
+  y = y + (y << 16);
+  return !((x & y) ^ y);
 }
 /* 
  * negate - return -x 
@@ -184,9 +198,11 @@ int allOddBits(int x) {
  *   Legal ops: ! ~ & ^ | + << >>
  *   Max ops: 5
  *   Rating: 2
+ *   Resolve:
+ *      相反数 = 各位取反 + 1
  */
 int negate(int x) {
-  return 2;
+  return ~x + 1;
 }
 //3
 /* 
@@ -197,9 +213,19 @@ int negate(int x) {
  *   Legal ops: ! ~ & ^ | + << >>
  *   Max ops: 15
  *   Rating: 3
+ *   Resolve:
+ *      x - 0x30 >= 0 && x - 0x3a < 0
+ *      两者符号位异或为1
+ *   Warning:
+ *      需要检查高位是否为0
  */
 int isAsciiDigit(int x) {
-  return 2;
+  int a = x >> 8;
+  
+  x = (x << 24) >> 24;
+  int y = (x - 0x30) >> 7;
+  int z = (x - 0x3a) >> 7;
+  return !(~(y ^ z) | a);
 }
 /* 
  * conditional - same as x ? y : z 
@@ -207,9 +233,14 @@ int isAsciiDigit(int x) {
  *   Legal ops: ! ~ & ^ | + << >>
  *   Max ops: 16
  *   Rating: 3
+ *   Resolve:
+ *      将x转为0或1, !!x
+ *      再利用 0的相反数仍为0x0000...., 1的相反数是 0xffff....
  */
 int conditional(int x, int y, int z) {
-  return 2;
+  x = !!x;
+  x = ~x + 1;
+  return (x & y) | (~x & z);
 }
 /* 
  * isLessOrEqual - if x <= y  then return 1, else return 0 
@@ -217,9 +248,23 @@ int conditional(int x, int y, int z) {
  *   Legal ops: ! ~ & ^ | + << >>
  *   Max ops: 24
  *   Rating: 3
+ *   Resolve:
+ *      符号不同比符号, 符号相同 y + (-x) >=0 符号位为0
+ *   Warning:
+ *      不能直接 y - x, 因为如果 x = TMin, 相减会溢出
  */
 int isLessOrEqual(int x, int y) {
-  return 2;
+  int isNegX = (x >> 31) & 1;
+  int isNegY = (y >> 31) & 1;
+
+  int mustLess = isNegX & (!isNegY);
+  int mustMore = (!isNegX) & isNegY;
+
+  int delta = y + (~x + 1);
+  int isNegDelta = (delta >> 31) & 1;
+  int lessOrEqual = !isNegDelta;
+
+  return mustLess | ((!mustMore) & lessOrEqual);
 }
 //4
 /* 
@@ -229,9 +274,11 @@ int isLessOrEqual(int x, int y) {
  *   Legal ops: ~ & ^ | + << >>
  *   Max ops: 12
  *   Rating: 4 
+ *   Resolve:
+ *      除了0和TMin, 其他数字和其相反数的符号位是不同的
  */
 int logicalNeg(int x) {
-  return 2;
+  return ((x >> 31) | ((~x + 1) >> 31)) + 1;
 }
 /* howManyBits - return the minimum number of bits required to represent x in
  *             two's complement
